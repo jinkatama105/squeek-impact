@@ -119,7 +119,7 @@ canvas#cv{display:block;width:100%;height:100%;background:#0d1220}
 <div id="wrap">
 <div id="stage">
 <canvas id="cv" width="640" height="960"></canvas>
-<div id="hud"><span id="score">0</span><span id="lives">♥♥♥</span><span id="wave">W1</span><span id="pausebtn" style="pointer-events:auto;cursor:pointer;padding:2px 10px;border:1px solid #2a3348;border-radius:8px;background:rgba(10,14,24,.6)">❚❚</span></div>
+<div id="hud"><span id="score">0</span><span id="lives">♥♥♥</span><span id="wave">W1</span></div>
 <button id="wbtn" style="position:absolute;top:2.2cqw;right:3cqw;z-index:7;pointer-events:auto;cursor:pointer;padding:1.5cqw 2cqw;border:1px solid var(--gold);border-radius:9px;background:rgba(240,185,74,.16);color:#ffd24a;font:700 max(8px,1.8cqw)/1 'Press Start 2P',monospace;text-shadow:0 .3cqw 0 #000">⬡ CONNECT</button>
 <div id="wmodal" style="position:fixed;inset:0;background:rgba(7,10,18,.85);z-index:9;display:none;align-items:center;justify-content:center"><div style="background:#fff;border:1px solid #e3e6ea;border-radius:16px;padding:18px;width:min(320px,86vw);font-family:-apple-system,'Segoe UI',sans-serif"><div style="color:#111;font-weight:700;margin-bottom:12px">Connect wallet <span style="float:right;cursor:pointer;color:#9aa1ab" id="wx">✕</span></div><div id="wlist"></div><div style="color:#9aa1ab;font-size:11px;margin-top:10px">Network: ETH Sepolia (testnet, chainId 11155111) — no funds needed</div></div></div>
 <div id="chain">chain: <b id="st">…</b> · block <span id="blk">–</span> · <span id="mode">connecting</span></div>
@@ -174,6 +174,7 @@ canvas#cv{display:block;width:100%;height:100%;background:#0d1220}
 <div class="btns">
 <button class="pbtn" id="resume">▶ RESUME</button>
 <button class="pbtn sec" id="tomenu">☰ MAIN MENU</button>
+<button class="pbtn sec" id="quit">✕ QUIT</button>
 </div>
 </div>
 
@@ -753,7 +754,6 @@ function doPause(){if(!raf)return;paused=true;
   $('pauseStats').textContent='Score '+G.score+' · Wave '+G.wave+' · lives '+G.lives;
   $('pauseO').classList.remove('hidden')}
 function doResume(){$('pauseO').classList.add('hidden');if(raf)paused=false}
-$('pausebtn').onclick=()=>{paused?doResume():doPause()};
 addEventListener('keydown',e=>{if(e.key==='p'||e.key==='P'){if(raf)paused?doResume():doPause()}});
 $('resume').onclick=doResume;
 $('tomenu').onclick=()=>{
@@ -770,9 +770,10 @@ const SEPOLIA='0xaa36a7';
 const WALLETS=[['Rabby Wallet','rabby.png',p=>p.isRabby],['MetaMask','metamask.svg',p=>p.isMetaMask],['Coinbase Wallet','coinbase.svg',p=>p.isCoinbaseWallet],['Rainbow','rainbow.svg',()=>false],['Robinhood Wallet','robinhood.png',p=>p.isRobinhood]];
 function allProviders(){const e=window.ethereum;if(!e)return[window.ethereum];return e.providers&&e.providers.length?e.providers:[e]}
 function findWallet(name){const ps=allProviders();const m=WALLETS.find(w=>w[0]===name);const hit=ps.find(m[2]);return hit||ps[0]}
-$('wbtn').onclick=()=>{const m=$('wmodal');m.style.display=m.style.display==='flex'?'none':'flex';if(m.style.display==='flex')fillWallets()};
+$('wbtn').onclick=()=>{if($('wbtn').dataset.on){if(raf)doPause();return}const m=$('wmodal');m.style.display=m.style.display==='flex'?'none':'flex';if(m.style.display==='flex')fillWallets()};
+$('quit').onclick=()=>{window.close();$('tomenu').click()}; // shortcut: browsers block window.close on user-opened tabs; falls back to main menu
 $('wx').onclick=()=>$('wmodal').style.display='none';
-if('ontouchstart' in window){const f=document.querySelector('.mfoot');if(f)f.innerHTML='drag to move · auto-fire · ❚❚ = pause<br>hamster SPINNING = turbo · ASLEEP = 2× loot'}
+if('ontouchstart' in window){const f=document.querySelector('.mfoot');if(f)f.innerHTML='drag to move · auto-fire · tap wallet address = pause<br>hamster SPINNING = turbo · ASLEEP = 2× loot'}
 function fillWallets(){
   const has=!!window.ethereum;const ps=allProviders();
   $('wlist').innerHTML=WALLETS.map(w=>{const det=has&&(w[2](window.ethereum||{})||ps.some(p=>p&&w[2](p)));
@@ -785,6 +786,7 @@ async function connect(name){
     const [addr]=await p.request({method:'eth_requestAccounts'});
     try{await p.request({method:'wallet_switchEthereumChain',params:[{chainId:SEPOLIA}]})}catch(e){}
     $('wbtn').textContent='⬡ '+addr.slice(0,6)+'…'+addr.slice(-4);
+    $('wbtn').dataset.on=addr;
     $('wmodal').style.display='none';
   }catch(e){const d=$('wlist');d.insertAdjacentHTML('beforeend','<div style="color:#ff6b6b;font-size:11px">'+(e.message||'rejected')+'</div>')}
 }
