@@ -99,9 +99,9 @@ function mk(w,h,draw){const c=document.createElement('canvas');c.width=w;c.heigh
 const PAL={b:'#9b7cff',g:'#5ecb8f',y:'#f0b94a',r:'#ff6b6b',w:'#e8ecf3',d:'#2a3348',o:'#ff9d5c'};
 function paintShip(col,acc){return mk(26,16,c=>{c.fillStyle=col;c.fillRect(4,6,16,4);c.fillRect(0,4,6,8);c.fillRect(14,2,8,2);c.fillRect(18,6,6,4);c.fillStyle=PAL.w;c.fillRect(20,3,3,2);c.fillStyle=acc;c.fillRect(0,5,2,6);c.fillStyle=PAL.y;c.fillRect(6,10,6,2)})}
 const SHIPS=[
- {name:'Violet',sprite:paintShip(PAL.b,PAL.r),spd:4,fire:7,lives:3,blurb:'all-rounder'},
- {name:'Zoomie',sprite:paintShip(PAL.g,PAL.w),spd:5.4,fire:5,lives:2,blurb:'fast · fragile · rapid-fire'},
- {name:'TankSqk',sprite:paintShip(PAL.y,PAL.d),spd:3.2,fire:9,lives:4,blurb:'slow · tough · heavy cannon'}];
+ {name:'Violet',sprite:paintShip(PAL.b,PAL.r),spd:4,fire:7,dmg:1,lives:3,blurb:'all-rounder'},
+ {name:'Zoomie',sprite:paintShip(PAL.g,PAL.w),spd:5.4,fire:5,dmg:1,lives:2,blurb:'fast · fragile · rapid-fire'},
+ {name:'TankSqk',sprite:paintShip(PAL.y,PAL.d),spd:3.2,fire:11,dmg:3,lives:4,blurb:'slow · tough · heavy cannon'}];
 const SH_KEY='***';
 let shipSel=parseInt(localStorage.getItem(SH_KEY))||0;
 function drawShips(){
@@ -161,8 +161,8 @@ function spawnWave(){
   $('wave').textContent='W'+G.wave;
 }
 function fire(){
-  G.bullets.push({x:G.px+24,y:G.py+7,v:6});
-  if(G.wave>=5&&G.lootT>0)G.bullets.push({x:G.px+24,y:G.py+2,v:6.2},{x:G.px+24,y:G.py+12,v:5.8});
+  G.bullets.push({x:G.px+24,y:G.py+7,v:6,dmg:G.ship.dmg||1});
+  if(G.wave>=5&&G.lootT>0)G.bullets.push({x:G.px+24,y:G.py+2,v:6.2,dmg:1},{x:G.px+24,y:G.py+12,v:5.8,dmg:1});
 }
 function boom(x,y,col,n=14){for(let i=0;i<n;i++)G.parts.push({x,y,vx:rnd(-2,2),vy:rnd(-2,2),l:rnd(12,26),c:col})}
 
@@ -181,7 +181,7 @@ function step(){
   /* input */
   let dy=0;
   if(keys.ArrowUp||keys.w)dy-=g.ship.spd;if(keys.ArrowDown||keys.s)dy+=g.ship.spd;
-  if(dragY)dy=(dragY.y-g.py)*.28;
+  if(dragY){const d=(dragY.y-g.py)*.28; dy=Math.max(-g.ship.spd,Math.min(g.ship.spd,d));}
   g.py=clamp(g.py+dy,14,H-26);
   let dx=0;if(keys.ArrowRight||keys.d)dx+=g.ship.spd*.85;if(keys.ArrowLeft||keys.a)dx-=g.ship.spd*.85;
   g.px=clamp(g.px+dx,6,W*0.55);
@@ -212,7 +212,7 @@ function step(){
   for(const b of g.bullets)for(const f of g.foes){
     const fy=f.kind==='boss'?f.y:f.yo||f.y;
     const r=f.kind==='boss'?22:f.kind==='heavy'?13:f.kind==='runner'?10:11;
-    if(Math.abs(b.x-f.x)<r&&Math.abs(b.y-fy)<r-3){b.x=1e9;f.hp--;g.shake=3;
+    if(Math.abs(b.x-f.x)<r&&Math.abs(b.y-fy)<r-3){b.x=1e9;f.hp-=b.dmg||1;g.shake=3;
       if(f.hp<=0){f.dead=1;g.combo++;const base=f.kind==='boss'?200:f.kind==='heavy'?60:f.kind==='runner'?35:25;
         const pts=base*mult*Math.min(4,1+g.combo/6|0);
         g.score+=pts|0;boom(f.x,fy,f.kind==='boss'?PAL.y:PAL.o,f.kind==='boss'?26:12);
