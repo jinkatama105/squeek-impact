@@ -678,7 +678,7 @@ function step(){
 function hurt(f){
   if(G.inv&&G.t-G.inv<90)return;G.inv=G.t;G.hitT=10;G.shake=6;G.combo=0;sfx.hurt();
   G.lives--;$('lives').textContent='♥'.repeat(Math.max(0,G.lives));
-  boom(G.px,G.py,PAL.b,10);if(f)f.dead=1;
+  boom(G.px,G.py,PAL.b,10);if(f&&f.kind!=='boss')f.dead=1;
   G.ebullets.length=0; /* mercy: wipe enemy bullets */
 }
 function gameOver(){
