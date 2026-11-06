@@ -7,6 +7,7 @@
 <meta name="description" content="Side-scrolling 2D arcade where the enemy waves are driven by the live Squeekchain hamster PoW chain.">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<meta name="squeekchain-project" content="73c23635-c3e1-4025-9be0-ee4988a76195">
 <link rel="icon" type="image/png" href="/favicon.png">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <meta property="og:title" content="Squeek Impact — chain-powered arcade">
@@ -107,7 +108,7 @@ canvas#cv{display:block;width:100%;height:100%;background:#0d1220}
 .dif{display:flex;flex-direction:column;align-items:center;gap:1cqw;padding:1.2cqw 3cqw}
 .dif>span{color:#ffe45e;font:400 5.2cqw/1.2 'Press Start 2P',ui-monospace,monospace;text-shadow:0 .5cqw 0 #000}
 .dv{display:flex;gap:3cqw;align-items:center;font:400 3.4cqw/1 'Press Start 2P',ui-monospace,monospace;color:#fff;text-shadow:0 .4cqw 0 #000}
-.dv b{cursor:pointer;color:#ffe45e;padding:0 2cqw;font-size:5cqw}
+.dv b{cursor:pointer;color:#ffe45e;padding:2.5cqw 4cqw;font-size:5cqw;border:1px solid #2a3348;border-radius:8px;background:#141b2c}
 #dtxt{cursor:pointer;min-width:22cqw;text-align:center}
 .mfoot{font:500 2.7cqw/1.4 monospace;color:#7f8aa6;text-align:center;max-width:90cqw!important}
 .hidden{display:none!important}
@@ -119,6 +120,8 @@ canvas#cv{display:block;width:100%;height:100%;background:#0d1220}
 <div id="stage">
 <canvas id="cv" width="640" height="960"></canvas>
 <div id="hud"><span id="score">0</span><span id="lives">♥♥♥</span><span id="wave">W1</span><span id="pausebtn" style="pointer-events:auto;cursor:pointer;padding:2px 10px;border:1px solid #2a3348;border-radius:8px;background:rgba(10,14,24,.6)">❚❚</span></div>
+<button id="wbtn" style="position:fixed;top:10px;right:10px;z-index:7;pointer-events:auto;cursor:pointer;padding:7px 12px;border:1px solid var(--acc);border-radius:9px;background:rgba(155,124,255,.18);color:var(--acc);font:700 11px/1 monospace">⬡ CONNECT</button>
+<div id="wmodal" style="position:fixed;inset:0;background:rgba(7,10,18,.85);z-index:9;display:none;align-items:center;justify-content:center"><div style="background:#fff;border:1px solid #e3e6ea;border-radius:16px;padding:18px;width:min(320px,86vw);font-family:-apple-system,'Segoe UI',sans-serif"><div style="color:#111;font-weight:700;margin-bottom:12px">Connect wallet <span style="float:right;cursor:pointer;color:#9aa1ab" id="wx">✕</span></div><div id="wlist"></div><div style="color:#9aa1ab;font-size:11px;margin-top:10px">Network: ETH Sepolia (testnet, chainId 11155111) — no funds needed</div></div></div>
 <div id="chain">chain: <b id="st">…</b> · block <span id="blk">–</span> · <span id="mode">connecting</span></div>
 
 <div class="overlay" id="menu">
@@ -760,6 +763,30 @@ $('tomenu').onclick=()=>{
 };
 /* idle frame on boot */
 reset();X.fillStyle=lg(X,0,0,0,H,CH[0].bgT,CH[0].bgB);X.fillRect(0,0,W,H);optUI();
+/* wallet connect — injected EIP-1193 only (Rabby/MetaMask/Brave/Coinbase), Sepolia testnet */
+const SEPOLIA='0xaa36a7';
+const WALLETS=[['Rabby Wallet','rabby.png',p=>p.isRabby],['MetaMask','metamask.svg',p=>p.isMetaMask],['Coinbase Wallet','coinbase.svg',p=>p.isCoinbaseWallet],['Rainbow','rainbow.svg',()=>false],['Robinhood Wallet','robinhood.png',p=>p.isRobinhood]];
+function allProviders(){const e=window.ethereum;if(!e)return[window.ethereum];return e.providers&&e.providers.length?e.providers:[e]}
+function findWallet(name){const ps=allProviders();const m=WALLETS.find(w=>w[0]===name);const hit=ps.find(m[2]);return hit||ps[0]}
+$('wbtn').onclick=()=>{const m=$('wmodal');m.style.display=m.style.display==='flex'?'none':'flex';if(m.style.display==='flex')fillWallets()};
+$('wx').onclick=()=>$('wmodal').style.display='none';
+if('ontouchstart' in window){const f=document.querySelector('.mfoot');if(f)f.innerHTML='drag to move · auto-fire · ❚❚ = pause<br>hamster SPINNING = turbo · ASLEEP = 2× loot'}
+function fillWallets(){
+  const has=!!window.ethereum;const ps=allProviders();
+  $('wlist').innerHTML=WALLETS.map(w=>{const det=has&&(w[2](window.ethereum||{})||ps.some(p=>p&&w[2](p)));
+    return `<button data-w="${w[0]}" style="display:flex;gap:12px;align-items:center;width:100%;margin:7px 0;padding:11px 12px;background:#fff;border:1px solid #e3e6ea;border-radius:14px;color:#111;font:600 13px -apple-system,'Segoe UI',sans-serif;cursor:pointer"><span style="position:relative;flex:none"><img src="/icons/${w[1]}" style="width:32px;height:32px;border-radius:9px;display:block">${det?'<i style="position:absolute;top:-2px;right:-2px;width:10px;height:10px;border-radius:50%;background:#2ecc71;border:2px solid #fff;display:block"></i>':''}</span>${w[0]}${det?'':' <span style="color:#9aa1ab;font-weight:400;margin-left:auto;font-size:11px">extension</span>'}</button>`}).join('')+(has?'':'<div style="color:#ff6b6b;font-size:11px;margin-top:8px">No EVM wallet found — install Rabby or MetaMask</div>');
+  document.querySelectorAll('#wlist button').forEach(b=>b.onclick=()=>connect(b.dataset.w));
+}
+async function connect(name){
+  const p=findWallet(name);if(!p)return;
+  try{
+    const [addr]=await p.request({method:'eth_requestAccounts'});
+    try{await p.request({method:'wallet_switchEthereumChain',params:[{chainId:SEPOLIA}]})}catch(e){}
+    $('wbtn').textContent='⬡ '+addr.slice(0,6)+'…'+addr.slice(-4);
+    $('wbtn').style.color='var(--grn)';$('wbtn').style.borderColor='var(--grn)';
+    $('wmodal').style.display='none';
+  }catch(e){const d=$('wlist');d.insertAdjacentHTML('beforeend','<div style="color:#ff6b6b;font-size:11px">'+(e.message||'rejected')+'</div>')}
+}
 </script>
 </body>
 </html>
