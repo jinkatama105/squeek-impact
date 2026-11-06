@@ -35,6 +35,9 @@ canvas{background:#0d1220;image-rendering:pixelated;border-radius:8px;max-width:
 <h1>SQUEEK <span>IMPACT</span></h1>
 <p>A Nokia-era arcade, but the enemy waves are driven by the live Squeekchain hamster chain. Hamster <b>SPINNING</b> = all hell breaks loose. Hamster <b>ASLEEP</b> = double loot.</p>
 <div id="ships"></div>
+<p style="margin:2px 0 2px;font-size:12px">DIFFICULTY</p>
+<div><button class="btn difo" data-v="easy" style="background:#2a3348">EASY</button> <button class="btn difo" data-v="medium" style="background:#2a3348">MEDIUM</button> <button class="btn difo" data-v="hard" style="background:#2a3348">HARD</button></div>
+<p style="font-size:11px;color:var(--gold);margin:0" id="optHint"></p>
 <button class="btn" id="start">▶ NEW GAME</button>
 <button class="btn" id="optbtn" style="background:#2a3348;margin-top:8px">⚙ OPTIONS</button>
 <p style="font-size:12px" id="best"></p>
@@ -45,10 +48,7 @@ canvas{background:#0d1220;image-rendering:pixelated;border-radius:8px;max-width:
 <h1 style="font-size:22px">OPTIONS</h1>
 <p style="margin:4px 0">SOUND</p>
 <button class="btn sndo" data-v="1" style="background:#2a3348">🔊 ON</button> <button class="btn sndo" data-v="0" style="background:#2a3348">🔇 OFF</button>
-<p style="margin:14px 0 4px">DIFFICULTY</p>
-<div><button class="btn difo" data-v="easy" style="background:#2a3348">EASY</button> <button class="btn difo" data-v="medium" style="background:#2a3348">MEDIUM</button> <button class="btn difo" data-v="hard" style="background:#2a3348">HARD</button></div>
-<p style="font-size:12px;margin-top:10px" id="optHint"></p>
-<button class="btn" id="optback" style="background:#2a3348">← BACK</button>
+<button class="btn" id="optback" style="background:#2a3348;margin-top:10px">← BACK</button>
 </div>
 
 <div class="overlay hidden" id="intro" style="background:transparent"></div>
@@ -163,10 +163,20 @@ document.addEventListener('pointerdown',()=>{if(AC&&AC.state==='suspended')AC.re
 const enemy=mk(22,14,c=>{c.fillStyle=PAL.r;c.fillRect(2,4,14,6);c.fillRect(0,2,4,10);c.fillRect(12,0,6,2);c.fillStyle=PAL.w;c.fillRect(2,6,3,2);c.fillStyle=PAL.o;c.fillRect(16,5,4,4)});
 const runner=mk(18,10,c=>{c.fillStyle=PAL.o;c.fillRect(2,3,12,4);c.fillRect(0,1,4,8);c.fillStyle=PAL.y;c.fillRect(12,4,4,2);c.fillStyle=PAL.w;c.fillRect(3,4,2,2)});
 const heavy=mk(26,18,c=>{c.fillStyle=PAL.d;c.fillRect(3,4,18,10);c.fillStyle=PAL.r;c.fillRect(5,6,14,6);c.fillRect(0,2,5,14);c.fillStyle=PAL.g;c.fillRect(20,6,5,6);c.fillStyle=PAL.w;c.fillRect(7,8,3,3)});
-const boss=mk(48,36,c=>{ /* wheel = boss */
- c.strokeStyle=PAL.y;c.lineWidth=3;c.beginPath();c.arc(24,18,15,0,7);c.stroke();
+const boss=mk(48,36,c=>{ /* ch1: spinning wheel, like SI2 mission boss */
+ c.strokeStyle=PAL.y;c.lineWidth=3;c.beginPath();c.arc(24,18,15,0,7);c.stroke()
  c.strokeStyle=PAL.d;for(let i=0;i<6;i++){const a=i*Math.PI/3;c.beginPath();c.moveTo(24,18);c.lineTo(24+Math.cos(a)*15,18+Math.sin(a)*15);c.stroke()}
  c.fillStyle=PAL.o;c.fillRect(18,12,12,10);c.fillStyle=PAL.w;c.fillRect(20,14,3,3)});
+const boss2=mk(48,36,c=>{ /* ch2: giant winged bug */
+ c.fillStyle=PAL.b;c.fillRect(2,8,14,4);c.fillRect(2,22,14,4); /* wings */
+ c.fillStyle=PAL.r;c.fillRect(16,10,20,16);c.fillStyle=PAL.d;c.fillRect(18,12,16,12);
+ c.fillStyle=PAL.y;c.fillRect(20,15,4,3);c.fillRect(28,15,4,3);
+ c.fillStyle=PAL.o;for(let i=0;i<4;i++)c.fillRect(20+i*5,26,2,5)});
+const boss3=mk(48,40,c=>{ /* ch3: octopus head */
+ c.fillStyle=PAL.g;c.beginPath();c.arc(24,16,14,Math.PI,0);c.fill();c.fillRect(10,16,28,8);
+ c.fillStyle='#fff';c.fillRect(16,10,6,5);c.fillRect(28,10,6,5);c.fillStyle='#111';c.fillRect(18,12,3,3);c.fillRect(30,12,3,3);
+ c.fillStyle=PAL.g;for(let i=0;i<5;i++)c.fillRect(12+i*7,24,3,10+((i*7)%6))});
+const BOSSES=[boss,boss2,boss3];
 const coin=mk(12,12,c=>{c.fillStyle=PAL.y;c.beginPath();c.arc(6,6,5,0,7);c.fill();c.fillStyle='#7a5a12';c.font='bold 8px monospace';c.fillText('S',3.5,9)});
 const sqk=mk(10,10,c=>{c.fillStyle=PAL.g;c.fillRect(1,3,8,4);c.fillRect(3,1,4,8)});
 
@@ -295,7 +305,7 @@ function step(){
   for(const p of g.pickups)X.drawImage(p.type==='coin'?coin:sqk,p.x-6,p.y-6);
   for(const b of g.bullets){X.fillStyle=PAL.w;X.fillRect(b.x,b.y-1,7,2)}
   for(const b of g.ebullets){X.fillStyle=PAL.r;X.fillRect(b.x-5,b.y-1,6,3)}
-  for(const f of g.foes){const sp=f.kind==='boss'?boss:f.kind==='heavy'?heavy:f.kind==='runner'?runner:enemy;
+  for(const f of g.foes){const sp=f.kind==='boss'?BOSSES[(chapterOf(g.wave)-1)%3]:f.kind==='heavy'?heavy:f.kind==='runner'?runner:enemy;
     X.drawImage(sp,f.x-(f.kind==='boss'?24:f.kind==='heavy'?13:f.kind==='runner'?9:11),(f.kind==='boss'?f.y:f.yo||f.y)-(f.kind==='boss'?18:f.kind==='heavy'?9:f.kind==='runner'?5:7))}
   for(const p of g.parts){X.fillStyle=p.c;X.globalAlpha=p.l/20;X.fillRect(p.x,p.y,2,2);X.globalAlpha=1}
   if(g.hitT>0){g.hitT--;X.globalAlpha=.5}else X.globalAlpha=1;
@@ -378,9 +388,10 @@ $('tomenu').onclick=()=>{
   if(G&&G.score>0)saveHS(G.score);           /* keep the score before leaving */
   cancelAnimationFrame(raf);raf=0;paused=false;
   $('pauseO').classList.add('hidden');$('over').classList.add('hidden');
-  $('menu').classList.remove('hidden');drawShips();};
+  $('menu').classList.remove('hidden');drawShips();optUI();
+  X.fillStyle='#0d1220';X.fillRect(0,0,W,H);};   /* wipe last game frame so no ghost ship/PAUSED */
 /* auto-boot once: draw idle frame */
-reset();G.lives=3;X.fillStyle='#0d1220';X.fillRect(0,0,W,H);
+reset();G.lives=3;X.fillStyle='#0d1220';X.fillRect(0,0,W,H);optUI();
 </script>
 </body>
 </html>
