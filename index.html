@@ -196,10 +196,11 @@ function reset(){
 }
 /* ---- chapters ---- */
 const CH=[
- {n:1,name:'CHAPTER 1 · THE WHEEL',bg:'#0d1220',star:'#232a3a',desc:'Clear the outer ring'},
- {n:2,name:'CHAPTER 2 · SQUEEKTOWN',bg:'#120d1c',star:'#3a2a4a',desc:'Kamikaze runners online'},
- {n:3,name:'CHAPTER 3 · DEEP BURROW',bg:'#0d1a14',star:'#1e3a2e',desc:'Shielded heavies · twin bosses'}];
+ {n:1,name:'CHAPTER 1 · THE WHEEL',bg:'#0d1220',star:'#232a3a',ground:'#1b2438',desc:'Clear the outer ring'},
+ {n:2,name:'CHAPTER 2 · SQUEEKTOWN',bg:'#120d1c',star:'#3a2a4a',ground:'#241a38',desc:'Kamikaze runners online'},
+ {n:3,name:'CHAPTER 3 · DEEP BURROW',bg:'#0d1a14',star:'#1e3a2e',ground:'#16301f',desc:'Shielded heavies · twin bosses'}];
 function chapterOf(w){return w>=11?3:w>=6?2:1}
+const TOOTH=[.7,1,.55,.85,.6,1,.75,.5,.9];/* irregular spike heights, GB-style */
 let banner=null;
 
 function spawnWave(){
@@ -303,6 +304,12 @@ function step(){
   const speed=(turbo?2.2:1)+(chain.progress||0)*2;
   X.fillStyle=ch.star;
   for(let i=0;i<40;i++){const sx=(i*97-g.t*speed*(i%3+1))%W;X.fillRect((sx+W)%W,(i*53)%H,i%3?1:2,i%3?1:2)}
+  /* Space Impact 2 style: saw-tooth ground silhouette, slow scroll */
+  const gh=H*.16,ts=26,sc=g.t*.3,off=sc%ts;X.fillStyle=ch.ground;X.beginPath();X.moveTo(-off,H+4);
+  for(let i=0;i<Math.ceil(W/ts)+2;i++){const f=TOOTH[(i+(sc/ts|0))%TOOTH.length];X.lineTo(i*ts-off-ts/2,H-gh*.25);X.lineTo(i*ts-off,H-gh*f)}
+  X.lineTo(W+ts,H+4);X.closePath();X.fill();
+  const tw=((sc/ts|0)%9)*26+12;/* watchtower every 9 teeth */
+  if(tw<W+26){const tx=tw-off;X.fillRect(tx,H-gh*1.15,3,gh*1.15);X.fillRect(tx-3,H-gh*1.15,9,4)}
   if(chill){X.fillStyle='rgba(240,185,74,.06)';X.fillRect(0,0,W,H)}
   for(const p of g.pickups)X.drawImage(p.type==='coin'?coin:sqk,p.x-6,p.y-6);
   for(const b of g.bullets){X.fillStyle=PAL.w;X.fillRect(b.x,b.y-1,7,2)}
