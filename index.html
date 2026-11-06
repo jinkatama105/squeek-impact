@@ -214,8 +214,8 @@ function spawnWave(){
     const hp=kind==='heavy'?3:1;
     G.foes.push({x:W+30+i*26+row*10,y:60+row*70+Math.sin(i)*14,vx:-(1.1+G.wave*.07+(turbo?.7:0))*G.diff.foe*(kind==='runner'?1.6:1),amp:8+row*10,ph:i,kind,hp});
   }
-  if(G.wave%3===0){G.foes.push({x:W+70,y:H/2-40,vx:-.9,kind:'boss',hp:8+G.wave,hp0:8+G.wave,t:0});sfx.boss()}
-  if(c===3&&G.wave%3===0)G.foes.push({x:W+180,y:H/2+60,vx:-.9,kind:'boss',hp:8+G.wave,hp0:8+G.wave,t:30});
+  if(G.wave%3===0){G.foes.push({x:W+70,y:H/2-40,vx:-.9,kind:'boss',hp:30+G.wave*3,hp0:30+G.wave*3,t:0});sfx.boss()}
+  if(c===3&&G.wave%3===0)G.foes.push({x:W+180,y:H/2+60,vx:-.9,kind:'boss',hp:30+G.wave*3,hp0:30+G.wave*3,t:30});
   else sfx.wave();
   $('wave').textContent='W'+G.wave;
 }
@@ -285,6 +285,10 @@ function step(){
   for(const f of g.foes){const fy=f.kind==='boss'?f.y:f.yo||f.y;
     if(Math.abs(f.x-g.px)<(f.kind==='boss'?65:20)&&Math.abs(fy-g.py)<(f.kind==='boss'?38:14)){hurt(f);}}
   for(const b of g.ebullets)if(Math.abs(b.x-g.px)<13&&Math.abs(b.y-g.py)<9){b.x=-1e9;hurt()}
+  /* reef collision: linear interp peak->valley at player x, same geometry as draw() */
+  const rgh=H*.16,rts=26,rsc=g.t*.3,roff=rsc%rts,rk=Math.round((g.px+roff)/rts),rpx=rk*rts-roff;
+  const rf=TOOTH[((rk%9)+9)%9],rtop=H-rgh*rf+(H-rgh*.25-(H-rgh*rf))*Math.min(1,Math.abs(g.px-rpx)/(rts/2));
+  if(g.py>rtop){hurt();g.py=rtop-14}
   /* pickups */
   for(const p of g.pickups){p.x+=p.vx;
     if(Math.abs(p.x-g.px)<16&&Math.abs(p.y-g.py)<16){p.got=1;
@@ -308,6 +312,7 @@ function step(){
   const gh=H*.16,ts=26,sc=g.t*.3,off=sc%ts;X.fillStyle=ch.ground;X.beginPath();X.moveTo(-off,H+4);
   for(let i=0;i<Math.ceil(W/ts)+2;i++){const f=TOOTH[(i+(sc/ts|0))%TOOTH.length];X.lineTo(i*ts-off-ts/2,H-gh*.25);X.lineTo(i*ts-off,H-gh*f)}
   X.lineTo(W+ts,H+4);X.closePath();X.fill();
+  X.strokeStyle='#d7e2f0';X.lineWidth=2;X.stroke();/* Nokia-clear bright reef outline */
   const tw=((sc/ts|0)%9)*26+12;/* watchtower every 9 teeth */
   if(tw<W+26){const tx=tw-off;X.fillRect(tx,H-gh*1.15,3,gh*1.15);X.fillRect(tx-3,H-gh*1.15,9,4)}
   if(chill){X.fillStyle='rgba(240,185,74,.06)';X.fillRect(0,0,W,H)}
