@@ -1,0 +1,308 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>SQUEEK IMPACT — chain-powered arcade</title>
+<meta name="description" content="Nokia-era side-scrolling arcade where the enemy waves are driven by the live Squeekchain hamster PoW chain.">
+<style>
+:root{--bg:#0b0e14;--fg:#e8ecf3;--acc:#9b7cff;--gold:#f0b94a;--grn:#5ecb8f;--red:#ff6b6b}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:var(--bg);color:var(--fg);font:14px/1.4 -apple-system,'Segoe UI',Roboto,sans-serif;overflow:hidden;touch-action:none}
+#wrap{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
+canvas{background:#0d1220;image-rendering:pixelated;border-radius:8px;max-width:100vw;max-height:100dvh;box-shadow:0 0 0 1px #1e2536,0 10px 40px #000}
+#hud{position:absolute;top:0;left:0;right:0;display:flex;justify-content:space-between;padding:8px 12px;font:600 12px/1 monospace;pointer-events:none;text-shadow:0 1px 0 #000;z-index:3}
+#chain{position:absolute;bottom:6px;left:0;right:0;text-align:center;font:500 11px/1 monospace;color:#8b95a7;z-index:3;pointer-events:none}
+#chain b{color:var(--grn)}#chain b.idle{color:var(--gold)}
+.overlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:rgba(11,14,20,.82);z-index:5;text-align:center;padding:20px}
+.overlay h1{font-size:30px;letter-spacing:2px}
+.overlay h1 span{color:var(--acc)}
+.overlay p{color:#8b95a7;max-width:340px}
+.btn{background:var(--acc);color:#fff;border:0;border-radius:10px;padding:12px 26px;font:700 15px sans-serif;cursor:pointer}
+.btn:active{transform:scale(.96)}
+.hidden{display:none!important}
+#stats{font:600 13px monospace;color:var(--gold)}
+.stars{display:flex;gap:6px;font-size:34px}
+</style>
+</head>
+<body>
+<div id="wrap">
+<canvas id="cv" width="320" height="480"></canvas>
+<div id="hud"><span id="score">0</span><span id="lives">♥♥♥</span><span id="wave">W1</span><span id="pausebtn" style="pointer-events:auto;cursor:pointer;padding:2px 10px;border:1px solid #2a3348;border-radius:8px">❚❚</span></div>
+<div id="chain">chain: <b id="st">…</b> · block <span id="blk">–</span> · <span id="mode">connecting</span></div>
+
+<div class="overlay" id="menu">
+<h1>SQUEEK <span>IMPACT</span></h1>
+<p>A Nokia-era arcade, but the enemy waves are driven by the live Squeekchain hamster chain. Hamster <b>SPINNING</b> = all hell breaks loose. Hamster <b>ASLEEP</b> = double loot.</p>
+<div id="ships"></div>
+<button class="btn" id="start">▶ PLAY</button>
+<p style="font-size:12px" id="best"></p>
+<p style="font-size:12px">drag / arrow-keys to move · auto-fire · pause ❚❚ anytime</p>
+</div>
+
+<div class="overlay hidden" id="pauseO">
+<h1 style="font-size:22px">PAUSED</h1>
+<div id="pauseStats" style="font:600 13px monospace;color:var(--gold)"></div>
+<button class="btn" id="resume">▶ RESUME</button>
+<button class="btn" id="tomenu" style="background:#2a3348">☰ MAIN MENU</button>
+</div>
+
+<div class="overlay hidden" id="over">
+<h1>GAME <span>OVER</span></h1>
+<div class="stars" id="stars"></div>
+<p id="finalScore"></p>
+<p id="board"></p>
+<button class="btn" id="again">↻ RETRY</button>
+<button class="btn" id="share" style="background:#2a3348">Share score</button>
+</div>
+</div>
+<script>
+/* ============ SQUEEK IMPACT ============
+   Zero-backend arcade. Enemy wave intensity is read live from the
+   Squeekchain PoW chain (public API + Sepolia RPC fallback).
+   High scores persist locally per-device. */
+const API='https://api.squeekchain.com/v1';
+const cv=document.getElementById('cv'),X=cv.getContext('2d');
+X.imageSmoothingEnabled=false;
+const W=320,H=480;
+const $=id=>document.getElementById(id);
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const rnd=(a,b)=>a+Math.random()*(b-a);
+
+/* ---- chain state ---- */
+const chain={spinning:null,rpm:0,height:0,progress:0,ok:false};
+let chainMode='connecting';
+async function pollChain(){
+  try{
+    const r=await fetch(API+'/status',{cache:'no-store'});
+    if(!r.ok)throw 0;
+    const d=await r.json();
+    const m=d.measurement||{},b=(d.builder&&d.builder.anchor)||d.builder||{};
+    chain.spinning=(m.coreStatus||'').toUpperCase().includes('SPINNING')&&!((m.coreStatus||'').toUpperCase().includes('IDLE'));
+    chain.rpm=(m.rpmMilli||0)/1000;
+    chain.height=b.blockHeight||0;
+    chain.progress=(b.blockProgress||0)/1e9;
+    chain.ok=true;
+    chainMode=chain.spinning?'TURBO (hamster on the wheel)':'CHILL (hamster asleep · 2× loot)';
+  }catch(e){
+    chain.ok=false;chainMode='chain offline — classic mode';
+  }
+  $('st').textContent=chain.spinning===null?'?':(chain.spinning?'SPINNING':'IDLE');
+  $('st').className=chain.spinning?'':'idle';
+  $('blk').textContent=chain.ok?'#'+chain.height:'–';
+  $('mode').textContent=chainMode;
+}
+pollChain();setInterval(pollChain,10000);
+
+/* ---- sprites (pixel art, drawn once to offscreen) ---- */
+function mk(w,h,draw){const c=document.createElement('canvas');c.width=w;c.height=h;draw(c.getContext('2d'));return c}
+const PAL={b:'#9b7cff',g:'#5ecb8f',y:'#f0b94a',r:'#ff6b6b',w:'#e8ecf3',d:'#2a3348',o:'#ff9d5c'};
+function paintShip(col,acc){return mk(26,16,c=>{c.fillStyle=col;c.fillRect(4,6,16,4);c.fillRect(0,4,6,8);c.fillRect(14,2,8,2);c.fillRect(18,6,6,4);c.fillStyle=PAL.w;c.fillRect(20,3,3,2);c.fillStyle=acc;c.fillRect(0,5,2,6);c.fillStyle=PAL.y;c.fillRect(6,10,6,2)})}
+const SHIPS=[
+ {name:'Violet',sprite:paintShip(PAL.b,PAL.r),spd:4,fire:7,lives:3,blurb:'all-rounder'},
+ {name:'Zoomie',sprite:paintShip(PAL.g,PAL.w),spd:5.4,fire:5,lives:2,blurb:'fast · fragile · rapid-fire'},
+ {name:'TankSqk',sprite:paintShip(PAL.y,PAL.d),spd:3.2,fire:9,lives:4,blurb:'slow · tough · heavy cannon'}];
+const SH_KEY='***';
+let shipSel=parseInt(localStorage.getItem(SH_KEY))||0;
+function drawShips(){
+  $('ships').innerHTML=SHIPS.map((s,i)=>`<label style="display:inline-flex;flex-direction:column;align-items:center;gap:2px;margin:0 6px;cursor:pointer;padding:8px 10px;border:1px solid ${i===shipSel?'var(--acc)':'var(--d,#232a36)'};border-radius:10px;${i===shipSel?'background:#1a1f2f':''}">
+    <input type="radio" name="sh" value="${i}" ${i===shipSel?'checked':''} style="display:none">
+    <canvas class="shc" data-i="${i}" width="52" height="32" style="width:52px;height:32px;image-rendering:pixelated"></canvas>
+    <b style="font-size:12px">${s.name}</b><small style="color:var(--mut);font-size:10px">${s.blurb}</small></label>`).join('');
+  document.querySelectorAll('.shc').forEach(c=>{const i=+c.dataset.i;c.getContext('2d').imageSmoothingEnabled=false;c.getContext('2d').drawImage(SHIPS[i].sprite,0,8)});
+  document.querySelectorAll('#ships label').forEach(l=>l.onclick=e=>{e.preventDefault();
+    shipSel=+l.querySelector('.shc').dataset.i;localStorage.setItem(SH_KEY,shipSel);drawShips()});
+  const b=loadHS()[0];$('best').textContent=b?'high score: '+b:'';
+}
+drawShips();
+const enemy=mk(22,14,c=>{c.fillStyle=PAL.r;c.fillRect(2,4,14,6);c.fillRect(0,2,4,10);c.fillRect(12,0,6,2);c.fillStyle=PAL.w;c.fillRect(2,6,3,2);c.fillStyle=PAL.o;c.fillRect(16,5,4,4)});
+const runner=mk(18,10,c=>{c.fillStyle=PAL.o;c.fillRect(2,3,12,4);c.fillRect(0,1,4,8);c.fillStyle=PAL.y;c.fillRect(12,4,4,2);c.fillStyle=PAL.w;c.fillRect(3,4,2,2)});
+const heavy=mk(26,18,c=>{c.fillStyle=PAL.d;c.fillRect(3,4,18,10);c.fillStyle=PAL.r;c.fillRect(5,6,14,6);c.fillRect(0,2,5,14);c.fillStyle=PAL.g;c.fillRect(20,6,5,6);c.fillStyle=PAL.w;c.fillRect(7,8,3,3)});
+const boss=mk(48,36,c=>{ /* wheel = boss */
+ c.strokeStyle=PAL.y;c.lineWidth=3;c.beginPath();c.arc(24,18,15,0,7);c.stroke();
+ c.strokeStyle=PAL.d;for(let i=0;i<6;i++){const a=i*Math.PI/3;c.beginPath();c.moveTo(24,18);c.lineTo(24+Math.cos(a)*15,18+Math.sin(a)*15);c.stroke()}
+ c.fillStyle=PAL.o;c.fillRect(18,12,12,10);c.fillStyle=PAL.w;c.fillRect(20,14,3,3)});
+const coin=mk(12,12,c=>{c.fillStyle=PAL.y;c.beginPath();c.arc(6,6,5,0,7);c.fill();c.fillStyle='#7a5a12';c.font='bold 8px monospace';c.fillText('S',3.5,9)});
+const sqk=mk(10,10,c=>{c.fillStyle=PAL.g;c.fillRect(1,3,8,4);c.fillRect(3,1,4,8)});
+
+/* ---- game ---- */
+let G=null,raf=0,paused=false;
+const HS_KEY='***';
+function loadHS(){try{const l=JSON.parse(localStorage.getItem(HS_KEY));return Array.isArray(l)?l.filter(n=>typeof n==='number'):[]}catch(e){return[]}}
+function saveHS(s){const l=loadHS();l.push(s);l.sort((a,b)=>b-a);localStorage.setItem(HS_KEY,JSON.stringify(l.slice(0,5)))}
+
+function reset(){
+  G={px:40,py:H/2,t:0,score:0,lives:3,wave:1,bullets:[],ebullets:[],foes:[],pickups:[],parts:[],
+     shake:0,combo:0,bossT:0,boss:null,hitT:0,lootT:0,nextWaveAt:0,waveT:0,inv:0,chapter:1,
+     ship:SHIPS[shipSel]}
+  G.lives=G.ship.lives;
+}
+/* ---- chapters ---- */
+const CH=[
+ {n:1,name:'CHAPTER 1 · THE WHEEL',bg:'#0d1220',star:'#232a3a',desc:'Clear the outer ring'},
+ {n:2,name:'CHAPTER 2 · SQUEEKTOWN',bg:'#120d1c',star:'#3a2a4a',desc:'Kamikaze runners online'},
+ {n:3,name:'CHAPTER 3 · DEEP BURROW',bg:'#0d1a14',star:'#1e3a2e',desc:'Shielded heavies · twin bosses'}];
+function chapterOf(w){return w>=11?3:w>=6?2:1}
+let banner=null;
+
+function spawnWave(){
+  const c=chapterOf(G.wave);
+  if(c!==G.chapter){G.chapter=c;banner={t:G.t,txt:CH[c-1].name};$('mode').title=''}
+  const n=6+Math.min(8,G.wave);
+  const turbo=chain.spinning===true&&chain.ok;
+  for(let i=0;i<n;i++){
+    const row=i%3;
+    const kind=(c>=2&&i%4===3)?'runner':(c>=3&&i%5===4)?'heavy':'grunt';
+    const hp=kind==='heavy'?3:1;
+    G.foes.push({x:W+30+i*26+row*10,y:60+row*70+Math.sin(i)*14,vx:-(1.1+G.wave*.07+(turbo?.7:0))*(kind==='runner'?1.6:1),amp:8+row*10,ph:i,kind,hp});
+  }
+  if(G.wave%3===0)G.foes.push({x:W+40,y:H/2-40,vx:-.45,kind:'boss',hp:8+G.wave,t:0});
+  if(c===3&&G.wave%3===0)G.foes.push({x:W+120,y:H/2+60,vx:-.45,kind:'boss',hp:8+G.wave,t:30});
+  $('wave').textContent='W'+G.wave;
+}
+function fire(){
+  G.bullets.push({x:G.px+24,y:G.py+7,v:6});
+  if(G.wave>=5&&G.lootT>0)G.bullets.push({x:G.px+24,y:G.py+2,v:6.2},{x:G.px+24,y:G.py+12,v:5.8});
+}
+function boom(x,y,col,n=14){for(let i=0;i<n;i++)G.parts.push({x,y,vx:rnd(-2,2),vy:rnd(-2,2),l:rnd(12,26),c:col})}
+
+let keys={},dragY=null;
+addEventListener('keydown',e=>{keys[e.key]=1;if(e.key==='p'||e.key==='P')paused=!paused;if(e.key===' '&&G&&!raf)start();});
+addEventListener('keyup',e=>keys[e.key]=0);
+function ptr(e){const t=e.touches?e.touches[0]:e;const r=cv.getBoundingClientRect();
+  return{x:(t.clientX-r.left)*W/r.width,y:(t.clientY-r.top)*H/r.height}}
+cv.addEventListener('touchstart',e=>{dragY=ptr(e)},{passive:true});
+cv.addEventListener('touchmove',e=>{dragY=ptr(e);e.preventDefault()},{passive:true});
+cv.addEventListener('touchend',()=>dragY=null);
+cv.addEventListener('mousemove',e=>{if(e.buttons)dragY=ptr(e)});
+
+function step(){
+  const g=G;g.t++;
+  /* input */
+  let dy=0;
+  if(keys.ArrowUp||keys.w)dy-=g.ship.spd;if(keys.ArrowDown||keys.s)dy+=g.ship.spd;
+  if(dragY)dy=(dragY.y-g.py)*.28;
+  g.py=clamp(g.py+dy,14,H-26);
+  let dx=0;if(keys.ArrowRight||keys.d)dx+=g.ship.spd*.85;if(keys.ArrowLeft||keys.a)dx-=g.ship.spd*.85;
+  g.px=clamp(g.px+dx,6,W*0.55);
+  if(g.t%g.ship.fire===0)fire();
+  /* chain modifiers */
+  const turbo=chain.spinning===true&&chain.ok;
+  const chill=chain.ok&&chain.spinning===false;
+  const mult=turbo?1.5:1;
+  if(chill)g.lootT=600; // asleep = loot window while alive
+  if(g.lootT>0)g.lootT--;
+  /* bullets */
+  for(const b of g.bullets)b.x+=b.v;
+  g.bullets=g.bullets.filter(b=>b.x<W+10);
+  for(const b of g.ebullets){b.x+=b.v;b.y+=b.vy||0}
+  g.ebullets=g.ebullets.filter(b=>b.x>-10&&b.y>-10&&b.y<H+10);
+  /* foes */
+  for(const f of g.foes){
+    f.x+=f.vx*(f.kind==='boss'?1:mult);
+    if(f.kind==='grunt')f.yo=f.y+Math.sin((g.t+f.ph*9)/26)*f.amp*.6;
+    if(f.kind==='boss'){f.t++;f.y=H/2+Math.sin(f.t/40)*90;
+      if(g.t%Math.max(28,80-g.wave*4)===0)g.ebullets.push({x:f.x-10,y:f.y+18,v:-2.4,vy:rnd(-.6,.6)});
+      f.vx=Math.max(-.9,f.vx);}
+    if(f.kind==='runner')f.yo=(f.yo||f.y)+clamp((g.py-(f.yo||f.y))*.06,-2.2,2.2);
+    if(f.kind==='grunt'&&g.t%130===0&&Math.random()<.5&&g.wave>2)
+      g.ebullets.push({x:f.x,y:f.yo||f.y,v:-2.6});
+  }
+  /* collisions bullet*foe */
+  for(const b of g.bullets)for(const f of g.foes){
+    const fy=f.kind==='boss'?f.y:f.yo||f.y;
+    const r=f.kind==='boss'?22:f.kind==='heavy'?13:f.kind==='runner'?10:11;
+    if(Math.abs(b.x-f.x)<r&&Math.abs(b.y-fy)<r-3){b.x=1e9;f.hp--;g.shake=3;
+      if(f.hp<=0){f.dead=1;g.combo++;const base=f.kind==='boss'?200:f.kind==='heavy'?60:f.kind==='runner'?35:25;
+        const pts=base*mult*Math.min(4,1+g.combo/6|0);
+        g.score+=pts|0;boom(f.x,fy,f.kind==='boss'?PAL.y:PAL.o,f.kind==='boss'?26:12);
+        if(chill||Math.random()<.4)g.pickups.push({x:f.x,y:fy,vx:-1,type:Math.random()<.18?'sqk':'coin'});}}
+  }
+  g.foes=g.foes.filter(f=>!f.dead&&f.x>-40);
+  if(!g.foes.length&&!g.waveT&&!g.nextWaveAt)g.nextWaveAt=g.t+55;
+  if(g.nextWaveAt&&g.t>=g.nextWaveAt){g.nextWaveAt=0;g.wave++;spawnWave()}
+  /* foe/eat player */
+  for(const f of g.foes){const fy=f.kind==='boss'?f.y:f.yo||f.y;
+    if(Math.abs(f.x-g.px)<20&&Math.abs(fy-g.py)<14){hurt(f);}}
+  for(const b of g.ebullets)if(Math.abs(b.x-g.px)<13&&Math.abs(b.y-g.py)<9){b.x=-1e9;hurt()}
+  /* pickups */
+  for(const p of g.pickups){p.x+=p.vx;
+    if(Math.abs(p.x-g.px)<16&&Math.abs(p.y-g.py)<16){p.got=1;
+      if(p.type==='coin'){g.score+=(chill?50:25);g.combo=Math.max(0,g.combo)}else{g.lives=Math.min(5,g.lives+1);$('lives').textContent='♥'.repeat(g.lives)}
+      boom(p.x,p.y,p.type==='coin'?PAL.y:PAL.g,6)}}
+  g.pickups=g.pickups.filter(p=>!p.got&&p.x>-10);
+  for(const p of g.parts){p.x+=p.vx;p.y+=p.vy;p.l--}
+  g.parts=g.parts.filter(p=>p.l>0);
+  if(g.shake>0)g.shake--;
+  $('score').textContent=g.score;
+  /* draw */
+  X.save();
+  if(g.shake)X.translate(rnd(-2,2),rnd(-2,2));
+  const ch=CH[chapterOf(g.wave)-1];
+  X.fillStyle=ch.bg;X.fillRect(-4,-4,W+8,H+8);
+  /* parallax stars + chain pulse */
+  const speed=(turbo?2.2:1)+(chain.progress||0)*2;
+  X.fillStyle=ch.star;
+  for(let i=0;i<40;i++){const sx=(i*97-g.t*speed*(i%3+1))%W;X.fillRect((sx+W)%W,(i*53)%H,i%3?1:2,i%3?1:2)}
+  if(chill){X.fillStyle='rgba(240,185,74,.06)';X.fillRect(0,0,W,H)}
+  for(const p of g.pickups)X.drawImage(p.type==='coin'?coin:sqk,p.x-6,p.y-6);
+  for(const b of g.bullets){X.fillStyle=PAL.w;X.fillRect(b.x,b.y-1,7,2)}
+  for(const b of g.ebullets){X.fillStyle=PAL.r;X.fillRect(b.x-5,b.y-1,6,3)}
+  for(const f of g.foes){const sp=f.kind==='boss'?boss:f.kind==='heavy'?heavy:f.kind==='runner'?runner:enemy;
+    X.drawImage(sp,f.x-(f.kind==='boss'?24:f.kind==='heavy'?13:f.kind==='runner'?9:11),(f.kind==='boss'?f.y:f.yo||f.y)-(f.kind==='boss'?18:f.kind==='heavy'?9:f.kind==='runner'?5:7))}
+  for(const p of g.parts){X.fillStyle=p.c;X.globalAlpha=p.l/20;X.fillRect(p.x,p.y,2,2);X.globalAlpha=1}
+  if(g.hitT>0){g.hitT--;X.globalAlpha=.5}else X.globalAlpha=1;
+  X.drawImage(g.ship.sprite,g.px-13,g.py-8);
+  X.globalAlpha=1;
+  /* chapter banner */
+  if(banner&&g.t-banner.t<110){const a=Math.min(1,(110-(g.t-banner.t))/20);
+    X.globalAlpha=a;X.fillStyle='rgba(11,14,20,.75)';X.fillRect(0,H/2-34,W,44);
+    X.fillStyle=PAL.y;X.font='bold 14px monospace';X.fillText(banner.txt,20,H/2-12);
+    X.fillStyle='#8b95a7';X.font='10px monospace';X.fillText(CH[chapterOf(g.wave)-1].desc,20,H/2+4);
+    X.globalAlpha=1}X.restore();
+  if(g.lives<=0)gameOver();
+}
+function hurt(f){
+  if(G.inv&&G.t-G.inv<90)return;G.inv=G.t;G.hitT=10;G.shake=6;G.combo=0;
+  G.lives--;$('lives').textContent='♥'.repeat(Math.max(0,G.lives));
+  boom(G.px,G.py,PAL.b,10);if(f)f.dead=1;
+  /* mercy: wipe bullets, brief pushback of nearest foes */
+  G.ebullets.length=0;
+}
+function gameOver(){
+  cancelAnimationFrame(raf);raf=0;
+  saveHS(G.score);
+  $('over').classList.remove('hidden');
+  $('finalScore').textContent='Score '+G.score+(chain.ok?(' · wave '+G.wave+' · chain was '+(chain.spinning?'TURBO':'CHILL')):'');
+  const stars=G.score>=1500?3:G.score>=600?2:G.score>=200?1:0;
+  $('stars').innerHTML='★'.repeat(stars)+'<span style="opacity:.3">☆'.repeat(3-stars)+'</span>';
+  const best=loadHS()[0];
+  $('board').textContent='local board: '+loadHS().join(' · ')+' · best '+best;
+  $('share').onclick=async()=>{const t='I scored '+G.score+' in SQUEEK IMPACT 🐹💥 (hamster '+(chain.spinning?'SPINNING':'IDLE')+' on-chain) — squeekimpact.vercel.app';
+    if(navigator.share)try{await navigator.share({text:t})}catch(e){}else{try{await navigator.clipboard.writeText(t);$('share').textContent='Copied!'}catch(e){}}};
+}
+function start(){
+  $('menu').classList.add('hidden');$('over').classList.add('hidden');
+  reset();spawnWave();banner={t:G.t,txt:CH[0].name};$('lives').textContent='♥'.repeat(G.lives);
+  cancelAnimationFrame(raf);
+  (function loop(){raf=requestAnimationFrame(loop);if(!paused){step()}else{X.fillStyle='rgba(11,14,20,.6)';X.fillRect(0,0,W,H);X.fillStyle='#8b95a7';X.font='bold 16px monospace';X.fillText('PAUSED',120,240)};})();
+}
+$('start').onclick=start;$('again').onclick=start;
+/* ---- pause button + overlay ---- */
+function doPause(){if(!raf)return;paused=true;X.fillStyle='rgba(11,14,20,.6)';X.fillRect(0,0,W,H);
+  $('pauseStats').textContent='Score '+G.score+' · Wave '+G.wave+' · lives '+G.lives;
+  $('pauseO').classList.remove('hidden')}
+function doResume(){ $('pauseO').classList.add('hidden');if(raf){paused=false}}
+$('pausebtn').onclick=()=>{paused?doResume():doPause()};
+addEventListener('keydown',e=>{if(e.key==='p'||e.key==='P'){raf?paused?doResume():doPause():0}});
+$('resume').onclick=doResume;
+$('tomenu').onclick=()=>{
+  if(G&&G.score>0)saveHS(G.score);           /* keep the score before leaving */
+  cancelAnimationFrame(raf);raf=0;paused=false;
+  $('pauseO').classList.add('hidden');$('over').classList.add('hidden');
+  $('menu').classList.remove('hidden');drawShips();};
+/* auto-boot once: draw idle frame */
+reset();G.lives=3;X.fillStyle='#0d1220';X.fillRect(0,0,W,H);
+</script>
+</body>
+</html>
