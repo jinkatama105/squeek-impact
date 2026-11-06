@@ -408,6 +408,8 @@ function noise(dur,vol=.1){if(!OP.sound)return;try{const a=ac(),b=a.createBuffer
   for(let i=0;i<d.length;i++)d[i]=(Math.random()*2-1)*(1-i/d.length);
   const s=a.createBufferSource(),g=a.createGain();g.gain.value=vol;s.buffer=b;s.connect(g).connect(a.destination);s.start()}catch(e){}}
 function beep(f,t){tone(f,t)}
+// menu click SFX: all buttons/ships, except sndo + difficulty row which beep themselves
+document.addEventListener('click',e=>{const b=e.target.closest('button,.shipc');if(b&&!b.classList.contains('sndo'))beep(780,.04,'square',.05)});
 const sfx={fire:()=>tone(1200,.05,'square',.025,-700),blaster:()=>tone(880,.07,'triangle',.04,-500),vulcan:()=>tone(1500,.03,'square',.018,-600),cannon:()=>{tone(150,.22,'sawtooth',.08,-90);noise(.08,.04)},hit:()=>noise(.12,.07),hurt:()=>tone(220,.25,'sawtooth',.09,-150),
   coin:()=>{tone(980,.07);setTimeout(()=>tone(1470,.1),70)},life:()=>{tone(660,.08);setTimeout(()=>tone(990,.12),90)},
   wave:()=>tone(520,.15,'triangle',.05),boss:()=>tone(140,.5,'sawtooth',.08,-60)};
