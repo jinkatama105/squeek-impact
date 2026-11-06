@@ -26,3 +26,5 @@ python3 -m http.server 8000
 
 Built for the Squeekchain code lane — the chain isn't a leaderboard bolted onto a game,
 it IS the game's difficulty engine.
+
+squeekchain-project: 73c23635-c3e1-4025-9be0-ee4988a76195
