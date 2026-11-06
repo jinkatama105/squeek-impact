@@ -563,7 +563,7 @@ function step(){
     dx=clamp((dragY.x-g.px)*.2,-g.ship.spd*.85,g.ship.spd*.85);
   }
   g.py=clamp(g.py+dy,14,H-26);
-  g.px=clamp(g.px+dx,6,W*0.55);
+  g.px=clamp(g.px+dx,6,W-16);
   if(g.t%g.ship.fire===0)fire();
   /* chain modifiers */
   const turbo=chain.spinning===true&&chain.ok;
