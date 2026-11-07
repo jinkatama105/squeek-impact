@@ -134,6 +134,10 @@ canvas#cv{display:block;width:100%;height:100%;background:#0d1220}
 <button class="mi" id="optbtn">OPTIONS</button>
 </div>
 <p id="optHint" style="font-size:11px;color:var(--gold);margin:2.5cqw 0 0"></p>
+<div class="panel" id="menuBoard" style="display:none;margin-top:2.5cqw;text-align:left">
+<p class="sub" id="boardWho" style="color:var(--gold)"></p>
+<p class="sub" id="boardList" style="margin-top:1cqw"></p>
+</div>
 <p id="best" style="font-size:12px;margin-top:1cqw"></p>
 <p class="mfoot">drag / arrow-keys to move · auto-fire · P = pause<br>hamster SPINNING = turbo · ASLEEP = 2× loot</p>
 </div>
@@ -198,6 +202,7 @@ canvas#cv{display:block;width:100%;height:100%;background:#0d1220}
 </div>
 <div class="btns">
 <button class="pbtn" id="again">↻ RETRY</button>
+<button class="pbtn sec" id="mainmenu">MAIN MENU</button>
 <button class="pbtn sec" id="share">SHARE SCORE</button>
 </div>
 </div>
@@ -435,9 +440,20 @@ document.addEventListener('pointerdown',()=>{if(AC&&AC.state==='suspended')AC.re
 
 /* ---- game ---- */
 let G=null,raf=0,paused=false;
-const HS_KEY='sqk_hs';
-function loadHS(){try{const l=JSON.parse(localStorage.getItem(HS_KEY));return Array.isArray(l)?l.filter(n=>typeof n==='number'):[]}catch(e){return[]}}
-function saveHS(s){const l=loadHS();l.push(s);l.sort((a,b)=>b-a);localStorage.setItem(HS_KEY,JSON.stringify(l.slice(0,5)))}
+const W_KEY='sqk_wallet';
+function hsKey(){const w=localStorage.getItem(W_KEY);return w?'sqk_hs_'+w.toLowerCase():'sqk_hs'}
+function loadHS(){try{const l=JSON.parse(localStorage.getItem(hsKey()));return Array.isArray(l)?l.filter(n=>typeof n==='number'):[]}catch(e){return[]}}
+function saveHS(s){const l=loadHS();l.push(s);l.sort((a,b)=>b-a);localStorage.setItem(hsKey(),JSON.stringify(l.slice(0,5)))}
+function shortAddr(a){return a.slice(0,6)+'…'+a.slice(-4)}
+function renderMenuBoard(){
+  const mb=$('menuBoard');if(!mb)return;
+  const w=localStorage.getItem(W_KEY);
+  const l=loadHS();
+  if(!w){mb.style.display='none';return}
+  mb.style.display='block';
+  $('boardWho').textContent='⬡ '+shortAddr(w)+' — local leaderboard';
+  $('boardList').textContent=l.length?l.map((s,i)=>(i+1)+'. '+s).join('  ·  '):'no scores yet — play!';
+}
 /* ---- bet the hamster's NEXT round — settles on real settledThroughRound from the chain API ---- */
 const BET_KEY='sqk_bet';
 function loadBet(){try{return JSON.parse(localStorage.getItem(BET_KEY))}catch(e){return null}}
@@ -789,6 +805,7 @@ $('start').onclick=()=>{$('menu').classList.add('hidden');drawShips();$('shipO')
 $('launch').onclick=showIntro;
 $('shipback').onclick=()=>{$('shipO').classList.add('hidden');$('menu').classList.remove('hidden')};
 $('again').onclick=showIntro;
+$('mainmenu').onclick=()=>{$('over').classList.add('hidden');$('menu').classList.remove('hidden');renderMenuBoard();drawShips();optUI();X.fillStyle='#0d1220';X.fillRect(0,0,W,H)};
 /* ---- pause ---- */
 function doPause(){if(!raf)return;paused=true;
   $('pauseStats').textContent='Score '+G.score+' · Wave '+G.wave+' · lives '+G.lives;
@@ -811,6 +828,11 @@ const WALLETS=[['Rabby Wallet','rabby.png',p=>p.isRabby],['MetaMask','metamask.s
 function allProviders(){const e=window.ethereum;if(!e)return[window.ethereum];return e.providers&&e.providers.length?e.providers:[e]}
 function findWallet(name){const ps=allProviders();const m=WALLETS.find(w=>w[0]===name);const hit=ps.find(m[2]);return hit||ps[0]}
 $('wbtn').onclick=()=>{if($('wbtn').dataset.on){if(raf)doPause();return}const m=$('wmodal');m.style.display=m.style.display==='flex'?'none':'flex';if(m.style.display==='flex')fillWallets()};
+/* restore saved wallet session + menu board */
+(function(){const w=localStorage.getItem(W_KEY);
+  if(w){$('wbtn').textContent='⬡ '+shortAddr(w);$('wbtn').dataset.on=w;}
+  renderMenuBoard();
+})();
 $('quit').onclick=()=>{window.close();$('tomenu').click()}; // shortcut: browsers block window.close on user-opened tabs; falls back to main menu
 $('wx').onclick=()=>$('wmodal').style.display='none';
 if('ontouchstart' in window){const f=document.querySelector('.mfoot');if(f)f.innerHTML='drag to move · auto-fire · tap wallet address = pause<br>hamster SPINNING = turbo · ASLEEP = 2× loot'}
@@ -825,9 +847,13 @@ async function connect(name){
   try{
     const [addr]=await p.request({method:'eth_requestAccounts'});
     try{await p.request({method:'wallet_switchEthereumChain',params:[{chainId:SEPOLIA}]})}catch(e){}
-    $('wbtn').textContent='⬡ '+addr.slice(0,6)+'…'+addr.slice(-4);
+    const old=localStorage.getItem('sqk_hs');
+    localStorage.setItem(W_KEY,addr);
+    if(old&&!localStorage.getItem(hsKey()))localStorage.setItem(hsKey(),old); // migrate legacy board to this wallet
+    $('wbtn').textContent='⬡ '+shortAddr(addr);
     $('wbtn').dataset.on=addr;
     $('wmodal').style.display='none';
+    renderMenuBoard();$('best').textContent=(b=>b?'high score: '+b:'')(loadHS()[0]);
   }catch(e){const d=$('wlist');d.insertAdjacentHTML('beforeend','<div style="color:#ff6b6b;font-size:11px">'+(e.message||'rejected')+'</div>')}
 }
 </script>
