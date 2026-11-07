@@ -187,6 +187,15 @@ canvas#cv{display:block;width:100%;height:100%;background:#0d1220}
 <hr class="sep">
 <p id="board" class="sub"></p>
 </div>
+<div class="panel" id="betPanel" style="display:none">
+<p class="sub" id="betQ" style="color:var(--gold)">THE HAMSTER OWNS THE NEXT ROUND — BET YOUR SCORE:</p>
+<div class="btns" id="betBtns" style="margin-top:2cqw">
+<button class="pbtn" id="betEven">EVEN</button>
+<button class="pbtn" id="betOdd">ODD</button>
+<button class="pbtn sec" id="betSkip">NO BET</button>
+</div>
+<p class="sub" id="betStatus" style="margin-top:2cqw"></p>
+</div>
 <div class="btns">
 <button class="pbtn" id="again">↻ RETRY</button>
 <button class="pbtn sec" id="share">SHARE SCORE</button>
@@ -209,7 +218,7 @@ const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 const rnd=(a,b)=>a+Math.random()*(b-a);
 
 /* ---- chain state ---- */
-const chain={spinning:null,rpm:0,height:0,progress:0,ok:false};
+const chain={spinning:null,rpm:0,height:0,progress:0,ok:false,distanceMm:0,round:0};
 let chainMode='connecting';
 async function pollChain(){
   try{
@@ -222,6 +231,8 @@ async function pollChain(){
     chain.rpm=(m.rpmMilli||0)/1000;
     chain.height=b.blockHeight||0;
     chain.progress=(b.blockProgress||0)/1e9;
+    chain.distanceMm=m.distanceMm||0;
+    chain.round=+((d.builder&&d.builder.anchor&&d.builder.anchor.settledThroughRound)||0);
     chain.ok=true;
     chainMode=chain.spinning?'TURBO (hamster on the wheel)':'CHILL (hamster asleep · 2× loot)';
   }catch(e){
@@ -233,6 +244,12 @@ async function pollChain(){
   $('mode').textContent=chainMode;
 }
 pollChain();setInterval(pollChain,10000);
+/* settle pending hamster-round bets whenever a new round lands on-chain */
+setInterval(()=>{if(!chain.ok)return;const b=loadBet();if(b&&chain.round>=b.target){const r=settleBet(b);showBetResult(r)}},10000);
+function showBetResult(r){const t=document.createElement('div');
+  t.style.cssText='position:fixed;top:8%;left:50%;transform:translateX(-50%);z-index:99;padding:14px 20px;border:2px solid var(--gold);border-radius:12px;background:rgba(10,14,24,.92);color:#ffd24a;font:700 11px/1.6 "Press Start 2P",monospace;text-align:center;max-width:88vw;text-shadow:0 .3cqw 0 #000';
+  t.innerHTML=(r.won?'🏆 ROUND #'+r.round+' = '+(r.round%2?'ODD':'EVEN')+'<br>YOU WIN! SCORE ×2':'ROUND #'+r.round+' · BET LOST<br>SCORE ÷2')+'<br><span style="opacity:.7">board: '+loadHS().join(' · ')+'</span>';
+  document.body.appendChild(t);setTimeout(()=>t.remove(),8000)}
 
 /* ---- 2D vector sprites (drawn once to hi-res offscreen canvases) ---- */
 const SS=3; /* sprite supersampling */
@@ -421,6 +438,20 @@ let G=null,raf=0,paused=false;
 const HS_KEY='sqk_hs';
 function loadHS(){try{const l=JSON.parse(localStorage.getItem(HS_KEY));return Array.isArray(l)?l.filter(n=>typeof n==='number'):[]}catch(e){return[]}}
 function saveHS(s){const l=loadHS();l.push(s);l.sort((a,b)=>b-a);localStorage.setItem(HS_KEY,JSON.stringify(l.slice(0,5)))}
+/* ---- bet the hamster's NEXT round — settles on real settledThroughRound from the chain API ---- */
+const BET_KEY='sqk_bet';
+function loadBet(){try{return JSON.parse(localStorage.getItem(BET_KEY))}catch(e){return null}}
+function placeBet(pick,score){const b={pick,score,target:chain.round+1,at:Date.now()};localStorage.setItem(BET_KEY,JSON.stringify(b));return b}
+function settleBet(b){ // returns final score: win = x2, lose = halved
+  const won=(b.target%2===0)===(b.pick==='EVEN');
+  const fin=won?b.score*2:Math.floor(b.score/2);
+  saveHS(fin);localStorage.removeItem(BET_KEY);
+  return {won,fin,round:b.target};
+}
+function trySettleBet(){ // called from pollChain when a new round settles on-chain
+  const b=loadBet();if(!b||!chain.ok||chain.round<b.target)return null;
+  return settleBet(b);
+}
 drawShips();
 
 function reset(){
@@ -693,14 +724,23 @@ function hurt(f){
 }
 function gameOver(){
   cancelAnimationFrame(raf);raf=0;
-  saveHS(G.score);
+  const score=G.score,canBet=chain.ok&&chain.round>0;
   $('over').classList.remove('hidden');
-  $('finalScore').innerHTML=G.score+(chain.ok?'<br><span class="sub" style="font-size:2.8cqw">wave '+G.wave+' · chain was '+(chain.spinning?'TURBO':'CHILL')+'</span>':'');
-  const stars=G.score>=1500?3:G.score>=600?2:G.score>=200?1:0;
+  $('finalScore').innerHTML=score+(chain.ok?'<br><span class="sub" style="font-size:2.8cqw">wave '+G.wave+' · chain was '+(chain.spinning?'TURBO':'CHILL')+'</span>':'');
+  const stars=score>=1500?3:score>=600?2:score>=200?1:0;
   $('stars').innerHTML='★'.repeat(stars)+'<span style="opacity:.3">'+'☆'.repeat(3-stars)+'</span>';
-  const best=loadHS()[0];
-  $('board').textContent='local board: '+loadHS().join(' · ')+' · best '+best;
-  $('share').onclick=async()=>{const t='I scored '+G.score+' in SQUEEK IMPACT 🐹💥 (hamster '+(chain.spinning?'SPINNING':'IDLE')+' on-chain) — squeekimpact.vercel.app';
+  if(!canBet){saveHS(score)}
+  $('board').textContent='local board: '+loadHS().join(' · ')+(loadHS()[0]?' · best '+loadHS()[0]:'');
+  const bp=$('betPanel');
+  if(canBet){bp.style.display='block';const pb=loadBet();
+    if(pb){$('betBtns').style.display='none';$('betQ').textContent='BET PENDING: '+pb.score+' on '+pb.pick+' · round #'+pb.target;$('betStatus').textContent='waiting for the hamster to settle round #'+pb.target+' on-chain…';}
+    else{$('betBtns').style.display='flex';$('betQ').textContent='BET '+score+' ON ROUND #'+(chain.round+1)+': EVEN OR ODD? WIN = ×2, LOSE = ÷2';
+    $('betStatus').textContent='settles when the hamster settles round #'+(chain.round+1)+' on-chain';
+    $('betEven').onclick=()=>{placeBet('EVEN',score);$('betBtns').style.display='none';$('betStatus').textContent='⬡ Bet '+score+' on EVEN · round #'+(chain.round+1)+' pending on-chain…';};
+    $('betOdd').onclick=()=>{placeBet('ODD',score);$('betBtns').style.display='none';$('betStatus').textContent='⬡ Bet '+score+' on ODD · round #'+(chain.round+1)+' pending on-chain…';};
+    $('betSkip').onclick=()=>{saveHS(score);$('board').textContent='local board: '+loadHS().join(' · ')+' · best '+loadHS()[0];bp.style.display='none';};}
+  }else{bp.style.display='none'}
+  $('share').onclick=async()=>{const t='I scored '+score+' in SQUEEK IMPACT 🐹💥 (hamster '+(chain.spinning?'SPINNING':'IDLE')+' on-chain) — squeekimpact.my.id';
     if(navigator.share)try{await navigator.share({text:t})}catch(e){}else{try{await navigator.clipboard.writeText(t);$('share').textContent='Copied!'}catch(e){}}};
 }
 function beginGame(){
