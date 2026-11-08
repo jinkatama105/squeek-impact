@@ -20,7 +20,9 @@ New missions and bosses every week or less.
 The chain is the game's live second player. The browser polls Squeekchain and every new block
 mutates the run: block height pulses the world, a quiet chain (CHILL) doubles loot, a spinning one
 (HYPE) triggers turbo mode. Pickups, wave pacing, and scoring multipliers are read live from
-blocks — no server, no keys, the chain is the only backend.
+blocks. Dying doesn't end the game: on game over you bet your score on EVEN or ODD of the next
+hamster round, settled on-chain — win ×2, lose ÷2, save points go to the wallet leaderboard.
+No server, no keys, the chain is the only backend.
 
 ## Features
 - 3 chapters (The Wheel / Squeektown / Deep Burrow) with distinct palettes and enemy mixes
